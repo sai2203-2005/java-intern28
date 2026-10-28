@@ -1,149 +1,135 @@
-# Java Multithreading: Race Condition vs. Thread-Safe Counters
+# Multithreaded File Search Utility
 
-This project demonstrates one of the fundamental concepts in Java concurrent programming: **race conditions**, **lost updates**, and how to achieve thread safety using **`synchronized`** methods and **`AtomicInteger`**.
-
----
-
-## 📌 Problem Overview
-
-When multiple threads concurrently modify a shared mutable variable without proper synchronization, concurrent updates can be lost due to thread interleaving.
-
-In this experiment:
-- We spin up **5 concurrent threads**.
-- Each thread performs **100,000 increments** on the same counter instances.
-- **Expected Final Count**: $5 \times 100,000 = 500,000$.
+A high-performance command-line utility built in Java that searches for keywords across multiple files concurrently using Java Concurrency (`ExecutorService`, `Callable`, and `Future`).
 
 ---
 
-## 🔍 Why Does the Unsafe Counter Fail?
+## Features
 
-The operation:
-```java
-count++;
+- **Concurrent Processing**: Distributes file-level searches across a pool of worker threads.
+- **Recursive File Discovery**: Traverses directories and subdirectories using `java.nio.file.Files.walk()`.
+- **Case-Insensitive Matching**: Matches keywords regardless of letter casing.
+- **Detailed Match Reporting**: Outputs matching filenames, line numbers, and line contents.
+- **Robust Error Handling**: Safely handles unreadable files and unexpected I/O errors without terminating the search.
+- **Graceful Lifecycle Management**: Shuts down executor thread pools reliably using `try-finally`.
+
+---
+
+## Project Structure
+
 ```
-appears as a single atomic operation in high-level Java code, but the JVM and CPU execute it in **three separate steps**:
-
-1. **Read**: Fetch the current value of `count` from memory into a CPU register.
-2. **Modify**: Add `1` to the register value.
-3. **Write**: Write the new value back to main memory.
-
-### Race Condition Illustration (Lost Update)
-
-Suppose `count = 10` and two threads increment concurrently:
-
-```text
-Time    Thread A                           Thread B
- ───    ────────                           ────────
- T1     Reads count (10)                   
- T2                                        Reads count (10)
- T3     Calculates 10 + 1 = 11             
- T4                                        Calculates 10 + 1 = 11
- T5     Writes count = 11                  
- T6                                        Writes count = 11 (Overwrites Thread A!)
+.
+├── MultiThreadFileSearch.java   # Main Java source code
+├── README.md                    # Project documentation
+└── documents/                   # Sample search directory
+    ├── file1.txt
+    ├── file2.txt
+    ├── file3.txt
+    ├── file4.txt
+    └── file5.txt
 ```
 
-**Result**: Even though two increments were performed, `count` only advanced from `10` to `11`. The update from Thread A is permanently lost.
+---
+
+## Prerequisites
+
+- **Java Development Kit (JDK)**: Version 8 or higher (JDK 11+ recommended).
+- Verify installation by running:
+  ```bash
+  javac -version
+  java -version
+  ```
 
 ---
 
-## 🛠️ Counter Implementations
+## Getting Started
 
-### 1. `UnsafeCounter` (Vulnerable to Race Conditions)
-```java
-class UnsafeCounter {
-    private int count = 0;
+### 1. Compile the Program
 
-    public void increment() {
-        count++; // Non-atomic read-modify-write
-    }
-
-    public int getCount() {
-        return count;
-    }
-}
-```
-
-### 2. `SafeCounter` (Protected via `synchronized`)
-```java
-class SafeCounter {
-    private int count = 0;
-
-    public synchronized void increment() {
-        count++; // Guarded by the object's intrinsic monitor lock
-    }
-
-    public int getCount() {
-        return count;
-    }
-}
-```
-* **How it works**: Before entering `increment()`, the thread acquires the intrinsic monitor lock of the `SafeCounter` instance (`this`). Other threads attempting to execute any `synchronized` method on the same object are blocked until the lock is released.
-
-### 3. `AtomicCounter` (Lock-Free via `AtomicInteger`)
-```java
-import java.util.concurrent.atomic.AtomicInteger;
-
-class AtomicCounter {
-    private final AtomicInteger count = new AtomicInteger(0);
-
-    public void increment() {
-        count.incrementAndGet(); // Atomic CAS (Compare-And-Swap)
-    }
-
-    public int getCount() {
-        return count.get();
-    }
-}
-```
-* **How it works**: Uses CPU-level atomic instructions (**Compare-And-Swap / CAS**) instead of acquiring operating system locks. It provides thread safety with high throughput under moderate contention.
-
----
-
-## ⚠️ Important Note: Why `volatile` Is Not Enough
-
-Declaring `private volatile int count;` ensures memory **visibility** (threads immediately see writes to main memory instead of reading stale CPU cache lines). However, it does **not** make compound operations like `count++` atomic. Threads will still read identical values concurrently and overwrite each other's increments.
-
----
-
-## 📊 Comparison Summary
-
-| Feature | `UnsafeCounter` | `SafeCounter` (`synchronized`) | `AtomicCounter` (`AtomicInteger`) |
-| :--- | :--- | :--- | :--- |
-| **Increment Statement** | `count++` | `synchronized void increment()` | `count.incrementAndGet()` |
-| **Synchronization** | None | Intrinsic monitor lock | Lock-free hardware CAS |
-| **Race Conditions** | Yes (Lost updates occur) | Prevented | Prevented |
-| **Guaranteed 500,000** | ❌ No (e.g. ~497,000) | ✔️ Yes (Consistent 500,000) | ✔️ Yes (Consistent 500,000) |
-| **Overhead** | Minimal | Lock acquisition & context switching | Low (CPU CAS loop) |
-| **Best Used For** | Single-threaded code | Complex multi-operation critical sections | High-performance counters & metrics |
-
----
-
-## 🚀 How to Run
-
-### Prerequisites
-- Java Development Kit (JDK 8 or higher).
-
-### Compilation & Execution
-From the project directory:
+Open a terminal in the project directory and run:
 
 ```bash
-# 1. Compile the Java file
-javac Practise.java
-
-# 2. Run the compiled application
-java Practise
+javac MultiThreadFileSearch.java
 ```
 
-### Sample Output
-```text
-Expected count:          500000
-Unsafe count:            497258
-Safe count (sync):       500000
-Atomic count (atomic):   500000
+### 2. Run with Default Settings
+
+By default, the program searches for `"Java"` inside the `documents` folder using `4` worker threads:
+
+```bash
+java MultiThreadFileSearch
+```
+
+### 3. Run with Custom Arguments
+
+Pass custom command-line arguments in the following order:
+1. `directory`: Path to directory to scan.
+2. `keyword`: Search term.
+3. `workers`: Number of worker threads.
+
+```bash
+# Example: Search for "database" in documents using 2 workers
+java MultiThreadFileSearch "documents" "database" 2
+
+# Example: Search for "exception" in an absolute folder path using 6 workers
+java MultiThreadFileSearch "C:\path\to\documents" "exception" 6
 ```
 
 ---
 
-## 💬 Interview Summary
+## Example Output
 
-> *"A counter updated by multiple threads can suffer from a race condition because `count++` is a read-modify-write operation, not an atomic operation. Multiple threads can read the same value concurrently and overwrite one another's updates (lost updates). We can solve this using `synchronized`, which restricts execution to one thread at a time under an object's intrinsic monitor lock, or by using `AtomicInteger`, which executes atomic increments via lock-free Compare-And-Swap (CAS) instructions."*
+```text
+File: documents\file1.txt
+  Line 1: Welcome to the Java file search demo.
+  Line 2: Java is a versatile object-oriented language.
+  Line 3: Concurrency in Java makes processing faster.
+
+File: documents\file3.txt
+  Line 1: Java Virtual Machine (JVM) executes Java bytecode.
+  Line 2: Enterprise applications rely heavily on Java frameworks like Spring.
+  Line 3: Learning Java opens up many backend engineering opportunities.
+
+File: documents\file5.txt
+  Line 1: Multithreading in Java allows multiple threads of execution.
+  Line 2: The java.util.concurrent package provides powerful high-level concurrency utilities.
+  Line 3: ExecutorService simplifies thread lifecycle management in modern java applications.
+
+Files scanned: 5
+Total matching lines: 9
+```
+
+---
+
+## Architecture & How Concurrency Works
+
+```
+Main Thread
+ │
+ ├── 1. Discovers files recursively (Files.walk)
+ ├── 2. Creates ExecutorService (FixedThreadPool)
+ ├── 3. Submits FileSearchTask per file -> Future<SearchResult>
+ │
+ ├── Worker Pool (Thread 1, Thread 2, ... Thread N)
+ │    └── Each worker processes assigned file line-by-line
+ │
+ └── 4. Main Thread collects results (Future.get()) and prints summary
+```
+
+### Key Concurrency Concepts
+
+| Class / Method | Description |
+|---|---|
+| `ExecutorService` | Manages thread lifecycle and thread pool allocation. |
+| `Executors.newFixedThreadPool(n)` | Creates an active pool capped at `n` threads. |
+| `Callable<SearchResult>` | Task abstraction allowing workers to return search results or errors. |
+| `executor.submit(task)` | Dispatches task to worker pool and returns a `Future`. |
+| `Future.get()` | Blocks until the worker completes its file search and retrieves the result. |
+| `executor.shutdownNow()` | Stops accepting tasks and requests interruption for active tasks. |
+
+---
+
+## Complexity Analysis
+
+- **Time Complexity**: $\mathcal{O}(B)$ where $B$ is the total byte size across all files scanned, divided across $W$ worker threads (subject to disk I/O throughput and CPU cores).
+- **Auxiliary Space**: $\mathcal{O}(F + M)$ where $F$ is the number of files (futures and paths in memory) and $M$ is the number of matched lines collected.

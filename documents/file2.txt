@@ -1,0 +1,3 @@
+Python is widely used in data science and AI.
+C++ is known for high performance and system programming.
+Rust provides memory safety without a garbage collector.

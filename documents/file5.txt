@@ -1,0 +1,3 @@
+Multithreading in Java allows multiple threads of execution.
+The java.util.concurrent package provides powerful high-level concurrency utilities.
+ExecutorService simplifies thread lifecycle management in modern java applications.

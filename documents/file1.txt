@@ -1,0 +1,3 @@
+Welcome to the Java file search demo.
+Java is a versatile object-oriented language.
+Concurrency in Java makes processing faster.
